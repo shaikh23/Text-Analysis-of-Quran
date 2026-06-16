@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quran-analysis"
+version = "0.1.0"
+description = "Data science workflows for English Quran translation analysis"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "pandas>=2.2.0",
+  "requests>=2.32.0",
+  "python-dotenv>=1.0.1",
+  "scikit-learn>=1.5.0",
+  "matplotlib>=3.9.0",
+  "seaborn>=0.13.2",
+  "jupyter>=1.1.1"
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
