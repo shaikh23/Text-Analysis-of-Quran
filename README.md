@@ -23,6 +23,20 @@ cp .env.example .env
 python scripts/fetch_chapters.py
 ```
 
+5. Build normalized verse dataset for one English translation:
+
+```bash
+python scripts/build_translation_dataset.py
+```
+
+This writes:
+
+- `data/raw/verses_translation_<id>.json`
+- `data/processed/verses_translation_<id>.csv`
+- `data/processed/verses_translation_<id>.parquet`
+
+Set translation ID in `.env` via `QURAN_TRANSLATION_ID`.
+
 ## Initial Project Layout
 
 - `src/quran_analysis/`: package code

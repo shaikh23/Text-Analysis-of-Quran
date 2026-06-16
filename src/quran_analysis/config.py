@@ -13,6 +13,7 @@ load_dotenv()
 class Settings:
     api_base_url: str = os.getenv("QURAN_API_BASE_URL", "https://api.quran.com/api/v4")
     api_key: str = os.getenv("QURAN_API_KEY", "")
+    translation_id: int = int(os.getenv("QURAN_TRANSLATION_ID", "20"))
 
 
 settings = Settings()
