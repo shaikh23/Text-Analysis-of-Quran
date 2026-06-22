@@ -149,6 +149,153 @@ md(
 )
 
 # --------------------------------------------------------------------------- #
+md(
+    """
+## Area 2 — Structural Overview
+
+### Thread A — Ordering: chronological vs canonical
+
+The Quran's 114 chapters are **not** arranged in the order they were revealed.
+Here we quantify how they *are* arranged, how far that departs from chronology,
+and whether any alternate (e.g. ring/concentric) structure is detectable.
+"""
+)
+
+code(
+    """
+order = eda.ordering_table(df)   # chapter_id, revelation_order, verses, displacement, ...
+
+# Q1: the book is arranged roughly longest-chapter-first.
+rho = order["chapter_id"].corr(order["verses"], method="spearman")
+print(f"Spearman(canonical position, chapter length) = {rho:.3f}  (strong 'longest-first')")
+for lo, hi, lbl in [(1, 38, "first third"), (39, 76, "middle third"), (77, 114, "last third")]:
+    seg = order[order.chapter_id.between(lo, hi)]
+    print(f"  {lbl:13s} (ch {lo:>3}-{hi:<3}): median {seg.verses.median():5.1f} verses")
+"""
+)
+
+code(
+    """
+# Q1 visual: chapter length by canonical position, with the longest-first trend.
+fig, ax = plt.subplots(figsize=(12, 4))
+colors = order["revelation_place"].map({"makkah": "steelblue", "madinah": "darkorange"})
+ax.bar(order["chapter_id"], order["verses"], color=colors, width=0.85)
+ax.set(xlabel="canonical chapter number", ylabel="verses",
+       title="Chapter length by position — the 'longest-first' arrangement")
+ax.annotate("Al-Fatihah (opening,\\nshort but placed first)", xy=(1, 7), xytext=(8, 120),
+            arrowprops=dict(arrowstyle="->"), fontsize=9)
+from matplotlib.patches import Patch
+ax.legend(handles=[Patch(color="steelblue", label="Makkah"), Patch(color="darkorange", label="Madinah")])
+plt.tight_layout()
+"""
+)
+
+code(
+    """
+# Q2: displacement between revelation order and canonical position.
+# Largest movers are Madinan chapters revealed late but placed near the front.
+movers = order.reindex(order["displacement"].abs().sort_values(ascending=False).index).head(6)
+print(movers[["chapter_id", "name", "revelation_place", "revelation_order", "displacement", "verses"]].to_string(index=False))
+print()
+print("Mean signed displacement by revelation place:")
+print(order.groupby("revelation_place", observed=True)["displacement"].mean().round(1).to_string())
+"""
+)
+
+code(
+    """
+# Q2 visual: revelation order vs canonical position. Distance from the diagonal
+# is the displacement; Madinan chapters sit far above it (revealed late, placed early).
+fig, ax = plt.subplots(figsize=(7, 7))
+for place, c in [("makkah", "steelblue"), ("madinah", "darkorange")]:
+    s = order[order.revelation_place == place]
+    ax.scatter(s["chapter_id"], s["revelation_order"], c=c, label=place, s=28)
+ax.plot([1, 114], [1, 114], "k--", lw=1, label="chronological = canonical")
+ax.set(xlabel="canonical chapter number", ylabel="revelation order",
+       title="Revelation order vs canonical position")
+ax.legend()
+plt.tight_layout()
+"""
+)
+
+code(
+    """
+# Q3 (data caveat): in this dataset revelation_order does NOT interleave Makkah/Madinah.
+mak = order[order.revelation_place == "makkah"]["revelation_order"]
+mad = order[order.revelation_place == "madinah"]["revelation_order"]
+print(f"Makkah revelation orders: {mak.min()}-{mak.max()}")
+print(f"Madinah revelation orders: {mad.min()}-{mad.max()}")
+print("=> all Makkan chapters precede all Madinan ones: revelation_order is a COARSE")
+print("   traditional sequence (place-grouped), not a fine verse-level chronology.")
+"""
+)
+
+code(
+    """
+# Q4: chronology is partly preserved locally in the canonical order.
+seq = order["revelation_order"].to_numpy()
+import numpy as np
+lag1 = np.corrcoef(seq[:-1], seq[1:])[0, 1]
+print(f"lag-1 autocorrelation of revelation order along canonical sequence = {lag1:.3f}")
+print("Makkah/Madinah run-clustering:", eda.place_runs(df))
+print("(far fewer runs than the random expectation => same-origin chapters cluster)")
+"""
+)
+
+md(
+    """
+### Alternate structures — ring / concentric composition
+
+Scholars (e.g. Farrin; Cuypers' *Semitic rhetoric*) argue some chapters are
+arranged as **rings** — section A mirrors section A′ around a thematic center.
+We test this on **Al-Baqarah** (the classic example) using *motif profiles*: each
+section is scored over curated theme lexicons, and we check whether mirror-position
+sections are more alike than a shuffled null allows.
+
+> Caveat: this operates on the **English translation** and coarse sections. Ring
+> arguments rest on Arabic verbal echoes and human-identified motifs, so a null
+> here is **not** a refutation — only evidence that the pattern isn't detectable
+> by these surface methods.
+"""
+)
+
+code(
+    """
+from quran_analysis import themes
+
+baqarah = df[df.chapter_id == 2]
+rukus = baqarah.groupby("ruku_number")["clean_text"].apply(" ".join).tolist()
+nine = [" ".join(g) for g in np.array_split(baqarah["clean_text"].tolist(), 9)]
+
+for label, units in [("40 ruku units", rukus), ("9 equal sections", nine)]:
+    res = eda.ring_test(themes.motif_profiles(units))
+    print(f"{label:18s}: mirror={res['mirror_similarity']:.3f}  "
+          f"null={res['null_mean']:.3f}  z={res['z']:+.2f}  p={res['p_value']:.3f}")
+print()
+print("z ~ 0 and p ~ 0.5 at both granularities => no detectable concentric symmetry.")
+"""
+)
+
+md(
+    """
+**Thread A takeaways**
+
+- **Arrangement is by length, not chronology**: Spearman(position, length) = −0.85;
+  median chapter length falls 98.5 → 37.5 → 11 verses across the three thirds.
+  Al-Fatihah is the deliberate short-but-first exception (the opening).
+- **The big order-shifts are systematically Madinan** — Al-Ma'idah (+107) and
+  At-Tawbah (+104) were revealed last but placed near the front.
+- **Data caveat**: `revelation_order` here is place-grouped (all Makkan 1–86,
+  all Madinan 87–114), so treat it as a coarse sequence, not a fine timeline.
+- **Local chronology survives** in the canonical order (lag-1 autocorr 0.44;
+  25 origin-runs vs ~43 expected) — same-origin chapters cluster.
+- **Ring structure**: not detectable in Al-Baqarah via motif profiles on the
+  English translation (z ≈ 0). A fair test of the scholarly claim needs Arabic
+  roots / verbal-echo tracking.
+"""
+)
+
+# --------------------------------------------------------------------------- #
 nb["cells"] = cells
 out = Path("notebooks/01_eda.ipynb")
 out.parent.mkdir(parents=True, exist_ok=True)

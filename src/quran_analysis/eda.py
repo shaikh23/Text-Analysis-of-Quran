@@ -117,6 +117,68 @@ def chapter_summary(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # --------------------------------------------------------------------------- #
+# Ordering (canonical vs revelation)
+# --------------------------------------------------------------------------- #
+def ordering_table(df: pd.DataFrame) -> pd.DataFrame:
+    """One row per chapter with canonical id, revelation order, and displacement.
+
+    ``displacement = revelation_order - chapter_id``: large positive means a
+    chapter was revealed late but placed early in the canonical order.
+    """
+    out = chapter_summary(df).sort_values("chapter_id").reset_index(drop=True)
+    out["displacement"] = out["revelation_order"] - out["chapter_id"]
+    return out
+
+
+def place_runs(df: pd.DataFrame) -> dict[str, float]:
+    """Run-clustering of revelation place along the canonical order.
+
+    Fewer observed runs than the chance expectation means same-origin chapters
+    sit adjacent (clustered) rather than interleaved.
+    """
+    places = ordering_table(df)["revelation_place"].to_numpy()
+    n = len(places)
+    counts = pd.Series(places).value_counts()
+    a, b = int(counts.iloc[0]), int(counts.iloc[1])
+    observed = 1 + int((places[1:] != places[:-1]).sum())
+    expected = 1 + 2 * a * b / n
+    return {"observed_runs": observed, "expected_runs_if_random": round(expected, 1)}
+
+
+def ring_test(profiles, n_perm: int = 2000, seed: int = 0) -> dict[str, float]:
+    """Test a sequence of section profiles for concentric (ring) symmetry.
+
+    ``profiles`` is an (n_sections x n_features) matrix. We measure the mean
+    cosine similarity between mirror pairs (i, n-1-i) and compare it against a
+    permutation null that shuffles section order. A positive z with low p means
+    sections are more similar to their mirror partner than chance allows.
+    """
+    import numpy as np
+    from sklearn.metrics.pairwise import cosine_similarity
+
+    profiles = np.asarray(profiles, dtype=float)
+    profiles = profiles[profiles.sum(axis=1) > 0]
+    n = len(profiles)
+    sim = cosine_similarity(profiles)
+
+    def mean_mirror(matrix: "np.ndarray") -> float:
+        return float(np.mean([matrix[i, n - 1 - i] for i in range(n // 2)]))
+
+    observed = mean_mirror(sim)
+    rng = np.random.default_rng(seed)
+    null = np.array(
+        [mean_mirror(sim[np.ix_(p, p)]) for p in (rng.permutation(n) for _ in range(n_perm))]
+    )
+    return {
+        "n_sections": n,
+        "mirror_similarity": round(observed, 4),
+        "null_mean": round(float(null.mean()), 4),
+        "z": round(float((observed - null.mean()) / null.std()), 3),
+        "p_value": round(float((null >= observed).mean()), 4),
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Length
 # --------------------------------------------------------------------------- #
 def length_extremes(df: pd.DataFrame, n: int = 10) -> dict[str, pd.DataFrame]:
