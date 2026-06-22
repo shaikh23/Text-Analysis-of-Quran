@@ -376,6 +376,98 @@ md(
 )
 
 # --------------------------------------------------------------------------- #
+md(
+    """
+## Area 3 — Text Length
+
+Verse length is heavily right-skewed (median 21 words, max 258). Here we examine
+the extremes, decompose what makes a *chapter* long, and ask whether length has
+any structural pattern across the book or within a chapter.
+"""
+)
+
+code(
+    """
+# Q2: the longest verses are overwhelmingly Madinan legislative passages.
+ext = eda.length_extremes(df, n=8)
+print("LONGEST verses:")
+print(ext["longest"][["verse_key", "chapter_name_simple", "word_count"]].to_string(index=False))
+top50_madinan = (df.nlargest(50, "word_count")["revelation_place"] == "madinah").mean()
+print(f"\\n{top50_madinan:.0%} of the 50 longest verses are Madinan")
+"""
+)
+
+code(
+    """
+# Q2: the short tail is the muqatta'at (disjointed-letter chapter openers).
+muqattaat = df[(df.verse_number == 1) & (df.word_count <= 5) & (df.clean_text.str.len() < 18)]
+print(f"{len(muqattaat)} disjointed-letter opener verses, e.g.:")
+print(muqattaat[["verse_key", "chapter_name_simple", "clean_text"]].head(6).to_string(index=False))
+"""
+)
+
+code(
+    """
+# Q3: decompose chapter length. log(total words) = log(verse count) + log(words/verse).
+# Variance attribution shows verse-COUNT dominates, and the two factors reinforce.
+cs = eda.chapter_summary(df).set_index("chapter_id")
+lt, ln, lm = np.log(cs.total_words), np.log(cs.verses), np.log(cs.mean_words_per_verse)
+print(f"var(log total words)   = {lt.var():.3f}")
+print(f"  verse-count share    = {ln.var() / lt.var():.0%}  (+ covariance)")
+print(f"  verse-length share   = {lm.var() / lt.var():.0%}  (+ covariance)")
+print(f"  corr(log count, log length) = {np.corrcoef(ln, lm)[0, 1]:+.3f}  (factors reinforce)")
+"""
+)
+
+code(
+    """
+# Q3 visual: every chapter as verse-count vs words-per-verse (bubble = total words).
+fig, ax = plt.subplots(figsize=(10, 6))
+for place, c in [("makkah", "steelblue"), ("madinah", "darkorange")]:
+    s = cs[cs.revelation_place == place]
+    ax.scatter(s.verses, s.mean_words_per_verse, s=s.total_words / 25,
+               alpha=0.5, color=c, label=place, edgecolor="k", linewidth=0.3)
+for cid, lbl in [(2, "Al-Baqarah"), (26, "Ash-Shu'ara"), (60, "Al-Mumtahanah")]:
+    ax.annotate(lbl, (cs.loc[cid, "verses"], cs.loc[cid, "mean_words_per_verse"]), fontsize=8)
+ax.set(xlabel="verses per chapter", ylabel="mean words per verse",
+       title="What makes a chapter long: many verses (right) vs long verses (up)")
+ax.legend()
+plt.tight_layout()
+"""
+)
+
+code(
+    """
+# Q4: within-chapter position has ~no effect, but length declines steadily
+# across the book (juz 1 -> 30) under the longest-first arrangement.
+rel_pos = df.groupby("chapter_id")["verse_number"].transform(lambda s: (s - 1) / max(len(s) - 1, 1))
+print(f"corr(within-chapter position, verse length) = {rel_pos.corr(df.word_count):+.3f}  (negligible)")
+
+juz_len = df.groupby("juz_number")["word_count"].mean()
+print(f"mean verse length: juz 1 = {juz_len[1]:.1f} words  ->  juz 30 = {juz_len[30]:.1f} words")
+ax = juz_len.plot(marker="o", color="seagreen")
+ax.set(xlabel="juz (1-30)", ylabel="mean words per verse",
+       title="Verse length declines steadily across the book")
+plt.tight_layout()
+"""
+)
+
+md(
+    """
+**Area 3 takeaways**
+
+- **Long verses are Madinan & legislative** — 2:282 (the debt verse, 258 words)
+  leads; 96% of the 50 longest verses are Madinan. The short tail is the 21
+  *muqaṭṭaʿāt* openers.
+- **Chapter length is driven more by verse-count than verse-length** (54% vs 18%
+  of log-variance), and the two reinforce (corr +0.47).
+- **No within-chapter length pattern** (corr 0.04), but a **strong across-book
+  decline** (juz 1: 35 words/verse → juz 30: 9; corr −0.76) — the verse-length
+  shadow of the longest-first ordering.
+"""
+)
+
+# --------------------------------------------------------------------------- #
 nb["cells"] = cells
 out = Path("notebooks/01_eda.ipynb")
 out.parent.mkdir(parents=True, exist_ok=True)
