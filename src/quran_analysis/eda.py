@@ -317,6 +317,43 @@ def vocabulary_richness(
     return pd.DataFrame(rows)
 
 
+def theme_intensity(df: pd.DataFrame, group_col: str = "revelation_place") -> pd.DataFrame:
+    """Theme intensity as keyword hits per 1,000 words, per group, with lift.
+
+    Normalizing by word count (rather than per-verse rates) removes the confound
+    that long Madinan verses collect more keyword hits regardless of topic.
+    ``lift`` is the ratio of the last group's intensity to the first (alphabetical
+    group order: madinah / makkah -> lift = madinah / makkah).
+    """
+    from quran_analysis import themes
+
+    scores = themes.score_frame(df["translation_text"])
+    words = df.groupby(df[group_col], observed=True)["word_count"].sum()
+    groups = list(words.index)
+    out = pd.DataFrame(
+        {
+            g: scores.groupby(df[group_col], observed=True).sum().loc[g] / words[g] * 1000
+            for g in groups
+        }
+    ).round(2)
+    if len(groups) == 2:
+        out["lift"] = (out[groups[0]] / out[groups[1]]).round(2)
+        out = out.sort_values("lift", ascending=False)
+    return out.rename_axis("theme").reset_index()
+
+
+def representative_verses(df: pd.DataFrame, theme: str, n: int = 3, min_words: int = 15) -> pd.DataFrame:
+    """Verses with the most keyword hits for a theme (excluding very short verses)."""
+    from quran_analysis import themes
+
+    eligible = df[df["word_count"] >= min_words]
+    hits = themes.score_frame(eligible["translation_text"])[theme]
+    top = hits.nlargest(n).index
+    out = df.loc[top, ["verse_key", "chapter_name_simple", "clean_text"]].copy()
+    out["hits"] = hits.loc[top].values
+    return out.reset_index(drop=True)
+
+
 def distinctive_terms(
     df: pd.DataFrame,
     group_col: str = "revelation_place",

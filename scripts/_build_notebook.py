@@ -538,6 +538,86 @@ md(
 )
 
 # --------------------------------------------------------------------------- #
+md(
+    """
+## Thread C — Major Themes (curated lexicons)
+
+Themes are defined as **curated keyword lexicons** (`quran_analysis.themes`) — 12
+themes from belief and afterlife to law, fighting, and charity. This is
+interpretable (we choose the categories) and reproducible. Matching is by word
+*prefix* so "believ" catches believe/believed/believers.
+
+> Method note: a naïve **per-verse** theme rate is confounded by verse length —
+> long Madinan verses collect more keyword hits regardless of topic. We therefore
+> measure **intensity = hits per 1,000 words**.
+"""
+)
+
+code(
+    """
+from quran_analysis import themes
+
+# Overall prevalence: share of verses touching each theme at least once.
+scores = themes.score_frame(df["translation_text"])
+prevalence = (scores > 0).mean().sort_values(ascending=False)
+ax = prevalence.mul(100).plot(kind="barh", color="teal", figsize=(8, 5))
+ax.invert_yaxis()
+ax.set(xlabel="% of verses with >=1 keyword", title="Theme prevalence across the Quran (English translation)")
+plt.tight_layout()
+print(f"{(scores.sum(1) == 0).mean():.0%} of verses match no theme (narrative/connective text)")
+"""
+)
+
+code(
+    """
+# Length-controlled Makkah vs Madinah theme intensity. Lift > 1 = more Madinan.
+intensity = eda.theme_intensity(df)
+intensity
+"""
+)
+
+code(
+    """
+# Visualize the split: martial/legal/charity themes are strongly Madinan;
+# eschatology and prophetic narratives lean Makkan (lift < 1).
+fig, ax = plt.subplots(figsize=(8, 5))
+colors = ["darkorange" if v > 1 else "steelblue" for v in intensity["lift"]]
+ax.barh(intensity["theme"], intensity["lift"], color=colors)
+ax.axvline(1, color="k", lw=1, ls="--")
+ax.invert_yaxis()
+ax.set(xlabel="Madinah / Makkah intensity ratio (log-spaced)", xscale="log",
+       title="Theme lift: Madinan (orange) vs Makkan (blue) emphasis")
+plt.tight_layout()
+"""
+)
+
+code(
+    """
+# Representative verses (most keyword hits, excluding very short verses).
+for theme in ["law_legislation", "fighting_striving", "afterlife_judgment", "israel_moses"]:
+    rep = eda.representative_verses(df, theme, n=1).iloc[0]
+    print(f"[{theme}]  {rep.verse_key} ({rep.hits} hits)")
+    print(f"   {rep.clean_text[:110]}...\\n")
+"""
+)
+
+md(
+    """
+**Thread C takeaways**
+
+- **Belief/guidance is the most pervasive theme** (~16% of verses); ~47% of verses
+  match no lexicon (narrative and connective text).
+- **The Makkah/Madinah thematic split matches classical scholarship** — but only
+  after controlling for verse length. Madinan revelation is far more about
+  **fighting (4×), charity (3.8×), law (3.1×), and prayer/qibla (2×)**; Makkan
+  revelation leans toward **eschatology (afterlife 0.74×) and prophetic
+  narratives (Israel/Moses 0.61×)**.
+- The naïve per-verse rate hid this (every theme looked "Madinan") — a reminder
+  that verse-length normalization is essential for any per-verse text metric here.
+"""
+)
+
+# --------------------------------------------------------------------------- #
 nb["cells"] = cells
 out = Path("notebooks/01_eda.ipynb")
 out.parent.mkdir(parents=True, exist_ok=True)

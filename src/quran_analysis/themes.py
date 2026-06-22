@@ -14,10 +14,14 @@ These lexicons back two analyses:
 
 from __future__ import annotations
 
+import re
+
 import numpy as np
 import pandas as pd
 
 from quran_analysis import text as qtext
+
+_WORD = re.compile(r"[a-z']+")
 
 # Each theme maps to keyword stems. Stems match by prefix after accent-folding
 # and lowercasing, so list the shortest unambiguous root.
@@ -40,13 +44,24 @@ LEXICONS: dict[str, tuple[str, ...]] = {
 }
 
 
+def _match_count(words: list[str], folded_text: str, stem: str) -> int:
+    """Hits for one stem: word-prefix matches, or phrase substring for multi-word stems.
+
+    Word-prefix matching (rather than raw substring) avoids false positives like
+    the stem ``eat`` matching ``created``/``great``/``death``.
+    """
+    if " " in stem:  # multi-word phrase, e.g. "cause of allah"
+        return folded_text.count(stem)
+    return sum(1 for w in words if w.startswith(stem))
+
+
 def score_text(text: str) -> dict[str, int]:
     """Count motif keyword hits per theme in a single text."""
-    cleaned = qtext.clean_text(text).lower()
     # Fold accents so e.g. "Mūsā"-style renderings still match plain stems.
-    folded = qtext._fold_accents(cleaned)
+    folded = qtext._fold_accents(qtext.clean_text(text).lower())
+    words = _WORD.findall(folded)
     return {
-        theme: sum(folded.count(stem) for stem in stems)
+        theme: sum(_match_count(words, folded, stem) for stem in stems)
         for theme, stems in LEXICONS.items()
     }
 
