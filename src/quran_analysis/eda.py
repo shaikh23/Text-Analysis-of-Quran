@@ -226,12 +226,95 @@ def length_extremes(df: pd.DataFrame, n: int = 10) -> dict[str, pd.DataFrame]:
 # --------------------------------------------------------------------------- #
 # Lexical
 # --------------------------------------------------------------------------- #
-def top_words(df: pd.DataFrame, n: int = 30, *, drop_stopwords: bool = True) -> pd.DataFrame:
-    """Most frequent tokens across all verses."""
+def word_frequencies(df: pd.DataFrame, *, drop_stopwords: bool = True) -> pd.Series:
+    """Full token-frequency series across all verses, descending by count."""
     counter: Counter[str] = Counter()
     for txt in df["translation_text"]:
         counter.update(qtext.tokenize(txt, drop_stopwords=drop_stopwords))
-    return pd.DataFrame(counter.most_common(n), columns=["word", "count"])
+    return pd.Series(counter, name="count").sort_values(ascending=False)
+
+
+def top_words(df: pd.DataFrame, n: int = 30, *, drop_stopwords: bool = True) -> pd.DataFrame:
+    """Most frequent tokens across all verses."""
+    freqs = word_frequencies(df, drop_stopwords=drop_stopwords).head(n)
+    return freqs.rename_axis("word").reset_index()
+
+
+def chapter_signature_terms(df: pd.DataFrame, top_n: int = 5) -> pd.DataFrame:
+    """Each chapter's most distinctive terms via TF-IDF across all 114 chapters.
+
+    With 114 documents, TF-IDF meaningfully down-weights words common to the whole
+    book and surfaces each chapter's signature vocabulary.
+    """
+    chapters = sorted(df["chapter_id"].unique())
+    names = df.groupby("chapter_id")["chapter_name_simple"].first()
+    docs = [
+        " ".join(
+            tok
+            for t in df.loc[df["chapter_id"] == c, "translation_text"]
+            for tok in qtext.tokenize(t, drop_stopwords=True)
+        )
+        for c in chapters
+    ]
+    vectorizer = TfidfVectorizer(token_pattern=r"[a-z']+", min_df=2, sublinear_tf=True)
+    matrix = vectorizer.fit_transform(docs)
+    vocab = vectorizer.get_feature_names_out()
+
+    rows = []
+    for i, c in enumerate(chapters):
+        row = matrix[i].toarray().ravel()
+        top_idx = row.argsort()[::-1][:top_n]
+        rows.append(
+            {"chapter_id": c, "name": names[c], "signature_terms": ", ".join(vocab[top_idx])}
+        )
+    return pd.DataFrame(rows)
+
+
+def vocabulary_richness(
+    df: pd.DataFrame,
+    group_col: str = "revelation_place",
+    *,
+    n_boot: int = 50,
+    seed: int = 0,
+) -> pd.DataFrame:
+    """Size-matched lexical diversity per group.
+
+    Raw type-token ratio (TTR) is biased by sample size, so each group is
+    repeatedly subsampled to the smallest group's content-token count; TTR and
+    the hapax rate are averaged over ``n_boot`` draws to compare fairly.
+    """
+    import numpy as np
+
+    tokens = {
+        str(g): [
+            tok
+            for t in df.loc[df[group_col] == g, "translation_text"]
+            for tok in qtext.tokenize(t, drop_stopwords=True)
+        ]
+        for g in df[group_col].dropna().unique()
+    }
+    sample_size = min(len(t) for t in tokens.values())
+    rng = np.random.default_rng(seed)
+
+    rows = []
+    for group, toks in tokens.items():
+        arr = np.array(toks, dtype=object)
+        ttrs, hapax_rates = [], []
+        for _ in range(n_boot):
+            draw = rng.choice(arr, size=sample_size, replace=False)
+            counts = Counter(draw)
+            ttrs.append(len(counts) / sample_size)
+            hapax_rates.append(sum(1 for v in counts.values() if v == 1) / len(counts))
+        rows.append(
+            {
+                "group": group,
+                "total_content_tokens": len(toks),
+                "matched_sample": sample_size,
+                "ttr_matched": round(float(np.mean(ttrs)), 4),
+                "hapax_rate_matched": round(float(np.mean(hapax_rates)), 4),
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def distinctive_terms(
