@@ -100,6 +100,38 @@ def revelation_place_summary(df: pd.DataFrame) -> pd.DataFrame:
     return by_place.reset_index()
 
 
+def place_profile(df: pd.DataFrame) -> pd.DataFrame:
+    """Per-revelation-place profile of the key structural metrics.
+
+    Surfaces the central finding that the Makkah/Madinah contrast is driven by
+    *verse length*: Madinan verses are far longer, which in turn lowers verses
+    per page and per ruku while words-per-page stays roughly constant.
+    """
+    per_ch = df.groupby(["revelation_place", "chapter_id"], observed=True).agg(
+        verses=("verse_id", "size"),
+        words=("word_count", "sum"),
+        pages=("page_number", "nunique"),
+        rukus=("ruku_number", "nunique"),
+        mean_words_per_verse=("word_count", "mean"),
+    )
+    per_ch["verses_per_page"] = per_ch["verses"] / per_ch["pages"]
+    per_ch["words_per_page"] = per_ch["words"] / per_ch["pages"]
+    per_ch["verses_per_ruku"] = per_ch["verses"] / per_ch["rukus"]
+
+    place = per_ch.groupby(level="revelation_place", observed=True)
+    out = pd.DataFrame(
+        {
+            "chapters": place.size(),
+            "median_verses_per_chapter": place["verses"].median(),
+            "median_words_per_verse": place["mean_words_per_verse"].median().round(1),
+            "median_verses_per_page": place["verses_per_page"].median().round(1),
+            "median_words_per_page": place["words_per_page"].median().round(0),
+            "median_verses_per_ruku": place["verses_per_ruku"].median().round(1),
+        }
+    )
+    return out.reset_index()
+
+
 def chapter_summary(df: pd.DataFrame) -> pd.DataFrame:
     """Per-chapter rollup ordered by chapter id."""
     g = df.groupby("chapter_id")

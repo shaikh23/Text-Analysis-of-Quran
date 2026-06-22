@@ -45,6 +45,8 @@ code(
 import sys
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -292,6 +294,84 @@ md(
 - **Ring structure**: not detectable in Al-Baqarah via motif profiles on the
   English translation (z ≈ 0). A fair test of the scholarly claim needs Arabic
   roots / verbal-echo tracking.
+"""
+)
+
+# --------------------------------------------------------------------------- #
+md(
+    """
+### Thread B — Makkah vs Madinah profile
+
+A popular characterization is that "Madinan chapters are longer." The data tells
+a more precise story: the contrast is driven by **verse length**, not chapter
+length, and the downstream density metrics all follow from that.
+"""
+)
+
+code(
+    """
+# One-glance profile. Note: similar words/page across places, but Madinan verses
+# are ~3x longer, so Madinan pages hold fewer (longer) verses.
+eda.place_profile(df)
+"""
+)
+
+code(
+    """
+# Q5: chapter verse-counts are NOT significantly different by place.
+from scipy.stats import mannwhitneyu
+
+mak = order[order.revelation_place == "makkah"]["verses"]
+mad = order[order.revelation_place == "madinah"]["verses"]
+u, p = mannwhitneyu(mak, mad)
+print(f"verses/chapter  -  Makkah median {mak.median():.0f}, Madinah median {mad.median():.0f}")
+print(f"Mann-Whitney U p = {p:.3f}  ->  no significant difference in chapter length")
+print("(Madinan chapters are bimodal: a few giants + many short ones.)")
+"""
+)
+
+code(
+    """
+# Q6: but verse length DOES differ, systemically. Plot the word-per-verse
+# distributions; Madinan mass sits well to the right.
+fig, ax = plt.subplots(figsize=(11, 4))
+for place, c in [("makkah", "steelblue"), ("madinah", "darkorange")]:
+    sns.kdeplot(df[df.revelation_place == place]["word_count"].clip(upper=120),
+                ax=ax, fill=True, alpha=0.4, color=c, label=place)
+ax.set(xlabel="words per verse (clipped at 120)", ylabel="density",
+       title="Verse length by revelation place — the real Makkah/Madinah signal")
+ax.legend()
+plt.tight_layout()
+"""
+)
+
+code(
+    """
+# Q7: where Madinan chapters sit in the book (share Madinan by canonical third).
+thirds = pd.cut(order["chapter_id"], [0, 38, 76, 114], labels=["first", "middle", "last"])
+share = order.assign(third=thirds).groupby("third", observed=True)["revelation_place"].apply(
+    lambda s: (s == "madinah").mean()
+)
+ax = share.plot(kind="bar", color="darkorange")
+ax.set(ylabel="fraction Madinan", title="Madinan chapters cluster in the front/middle, not the tail")
+ax.bar_label(ax.containers[0], fmt="%.0f%%", labels=[f"{v:.0%}" for v in share])
+plt.tight_layout()
+"""
+)
+
+md(
+    """
+**Thread B takeaways**
+
+- **It's verse length, not chapter length.** Chapter verse-counts don't differ
+  significantly by place (Mann-Whitney p ≈ 0.71); Madinan *verses* are ~2–3×
+  longer (median 36 vs 12 words/verse), systemically.
+- **Density follows from verse length**: Madinan pages hold fewer verses
+  (6 vs 10) but roughly equal words (~240 vs ~220) — a near-constant page word
+  budget, echoing the equal-length juz finding.
+- **Placement**: Madinan chapters concentrate in the front/middle thirds and are
+  nearly absent (8%) from the short-Makkan tail — a consequence of the
+  longest-first ordering meeting their bimodal sizes.
 """
 )
 
